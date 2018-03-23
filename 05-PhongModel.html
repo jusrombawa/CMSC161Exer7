@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<title>Lighting :: 05-Phong's Light Reflection Model</title>
+	<script type="x-shader/x-vertex" id="vshader">
+		attribute vec3 aPosition;
+
+		attribute vec3 aNormal;
+
+		uniform mat4 uModel;
+		uniform mat4 uView;
+		uniform mat4 uProjection;
+		uniform mat4 uNormal;
+
+		uniform vec3 uLightDirection;
+		uniform vec3 uEyePosition;    // camera position
+
+        // Light Color Properties
+		uniform vec3 uLightAmbient;
+		uniform vec3 uLightDiffuse;
+		uniform vec3 uLightSpecular;
+
+        // Material Color Properties
+		uniform vec3 uMaterialAmbient;
+		uniform vec3 uMaterialDiffuse;
+		uniform vec3 uMaterialSpecular;
+		uniform float uShininess;
+
+        // Flags
+		uniform bool uEnableAmbient;
+		uniform bool uEnableDiffuse;
+		uniform bool uEnableSpecular;
+
+		varying vec4 vColor;
+		void main() {
+			gl_Position = uProjection * uView * uModel * vec4(aPosition,1.0);
+
+			vec3 vertexPosition = vec3(uModel * vec4(aPosition,1.0));
+			vec3 ambientColor = vec3(0.0,0.0,0.0);
+			vec3 diffuseColor = vec3(0.0,0.0,0.0);
+			vec3 specularColor = vec3(0.0,0.0,0.0);
+
+			vec3 corrected_aNormal = vec3(uNormal * vec4(aNormal,1.0));
+			vec3 normalized_aNormal = normalize(corrected_aNormal);
+
+			vec3 normalized_uLightDirection = normalize(uLightDirection);
+			vec3 eyeDirection = uEyePosition - vertexPosition;           // vector that contains the distance and direction of the eye position from the object/vertex
+			vec3 normalized_eyeDirection = normalize(eyeDirection);
+
+            // compute for reflection direction of an incident vector
+            vec3 reflectDirection = reflect(
+                                        normalized_uLightDirection,     // normalized light direction vector - from light to surface
+                                        normalized_aNormal              // normal at a vertex in the surface
+                                    );
+			vec3 normalized_reflectDirection = normalize(reflectDirection);  // normalize computed reflection direction
+
+            //ambient
+			if(uEnableAmbient) {
+			ambientColor = uLightAmbient * uMaterialAmbient;
+			}
+
+			//diffuse
+			if(uEnableDiffuse) {
+    			float lambertCoefficient = max(dot(-normalized_uLightDirection,normalized_aNormal),0.0);         // negative lambertCoefficient is automatically converted to 0
+    			diffuseColor =  uLightDiffuse * uMaterialDiffuse * lambertCoefficient;
+			}
+
+			//specular
+			if(uEnableSpecular) {
+    			float specularCoefficient = max(dot(normalized_reflectDirection,normalized_eyeDirection),0.0);   // negative specularCoefficient is automatically converted to 0
+    			specularCoefficient = pow(specularCoefficient,uShininess);
+    			specularColor =  uLightSpecular * uMaterialSpecular * specularCoefficient;
+			}
+
+			vColor = vec4(ambientColor+diffuseColor+specularColor,1.0);
+		}
+	</script>
+	<script type="x-shader/x-fragment" id="fshader">
+		precision mediump float;
+		varying vec4 vColor;
+		void main() {
+			gl_FragColor = vColor;
+		}
+	</script>
+    <script src="./lib/webgl-init.js"></script>
+    <script src="./lib/webgl-utils.js"></script>
+    <script src="./lib/webgl-debug.js"></script>
+    <script src="./lib/gl-matrix.js"></script>
+	<script>
+		function main() {
+			var canvas = document.getElementById("c");
+			var gl = initializeWebGL(canvas);
+
+			var vertexShader = initializeShader(gl,"vshader");
+			var fragmentShader = initializeShader(gl, "fshader");
+			var program = initializeProgram(gl,vertexShader,fragmentShader);
+			gl.useProgram(program);
+
+
+		  	var cube_vertices = [   // Coordinates
+		     1.0, 1.0, 1.0,  -1.0, 1.0, 1.0,  -1.0,-1.0, 1.0,   1.0,-1.0, 1.0, //front
+		     1.0, 1.0, 1.0,   1.0,-1.0, 1.0,   1.0,-1.0,-1.0,   1.0, 1.0,-1.0, //right
+		     1.0, 1.0, 1.0,   1.0, 1.0,-1.0,  -1.0, 1.0,-1.0,  -1.0, 1.0, 1.0, //up
+		    -1.0, 1.0, 1.0,  -1.0, 1.0,-1.0,  -1.0,-1.0,-1.0,  -1.0,-1.0, 1.0, //left
+		    -1.0,-1.0,-1.0,   1.0,-1.0,-1.0,   1.0,-1.0, 1.0,  -1.0,-1.0, 1.0, //down
+		     1.0,-1.0,-1.0,  -1.0,-1.0,-1.0,  -1.0, 1.0,-1.0,   1.0, 1.0,-1.0  //back
+		  	];
+		  	//buffer creation
+		  	var cubeVerticesBuffer = gl.createBuffer();
+		  	gl.bindBuffer(gl.ARRAY_BUFFER, cubeVerticesBuffer);
+		  	gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cube_vertices), gl.STATIC_DRAW);
+		  	//attribute variable mapping to buffer
+		  	var aPosition = gl.getAttribLocation(program,"aPosition");
+		  	gl.vertexAttribPointer(aPosition,3,gl.FLOAT,false,0,0);
+		  	gl.enableVertexAttribArray(aPosition);
+		  	//unbind buffer to ARRAY_BUFFER POINTER
+		  	gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+		  	var normals = [   // Normal of each vertex
+                0.0, 0.0, 1.0,   0.0, 0.0, 1.0,   0.0, 0.0, 1.0,   0.0, 0.0, 1.0,  // front
+    		    1.0, 0.0, 0.0,   1.0, 0.0, 0.0,   1.0, 0.0, 0.0,   1.0, 0.0, 0.0,  // right
+    		    0.0, 1.0, 0.0,   0.0, 1.0, 0.0,   0.0, 1.0, 0.0,   0.0, 1.0, 0.0,  // up
+    		   -1.0, 0.0, 0.0,  -1.0, 0.0, 0.0,  -1.0, 0.0, 0.0,  -1.0, 0.0, 0.0,  // left
+    		    0.0,-1.0, 0.0,   0.0,-1.0, 0.0,   0.0,-1.0, 0.0,   0.0,-1.0, 0.0,  // down
+    		    0.0, 0.0,-1.0,   0.0, 0.0,-1.0,   0.0, 0.0,-1.0,   0.0, 0.0,-1.0   // back
+    		  ];
+		  	//buffer creation
+		  	var normalBuffer = gl.createBuffer();
+		  	gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+		  	gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normals), gl.STATIC_DRAW);
+		  	//attribute variable mapping to buffer
+		  	var aNormal = gl.getAttribLocation(program,"aNormal");
+		  	gl.vertexAttribPointer(aNormal,3,gl.FLOAT,false,0,0);
+		  	gl.enableVertexAttribArray(aNormal);
+		  	//unbind buffer to ARRAY_BUFFER POINTER
+		  	gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+		  	// Indices of the vertices
+			var indices = [
+			 0, 1, 2,   0, 2, 3,    // front
+			 4, 5, 6,   4, 6, 7,    // right
+			 8, 9,10,   8,10,11,    // up
+			12,13,14,  12,14,15,    // left
+			16,17,18,  16,18,19,    // down
+			20,21,22,  20,22,23     // back
+			];
+			//buffer creation
+		  	var indexBuffer = gl.createBuffer();
+		  	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+		  	gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint8Array(indices), gl.STATIC_DRAW);
+		  	//unbind buffer to gl.ELEMENT_ARRAY_BUFFER POINTER
+		  	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+
+		  	//set-up model matrix, view matrix, and projection matrix
+		  	var modelMatrix = mat4.create();
+		  	var uModel = gl.getUniformLocation(program,"uModel");
+		  		gl.uniformMatrix4fv(uModel,false,modelMatrix);
+
+		  	//add normal matrix
+		  	var normalMatrix = mat4.create();
+		  	var uNormal = gl.getUniformLocation(program,"uNormal");
+		  	mat4.invert(normalMatrix,modelMatrix);
+		  	mat4.transpose(normalMatrix,normalMatrix);
+		  	gl.uniformMatrix4fv(uNormal,false,normalMatrix);
+
+		  	var viewMatrix = mat4.create();
+		  	var uView = gl.getUniformLocation(program,"uView");
+		  	mat4.lookAt(viewMatrix,[3,3,7],[0,0,0],[0,1,0]);
+		  	gl.uniformMatrix4fv(uView,false,viewMatrix);
+
+		  	var projectionMatrix = mat4.create();
+		  	var uProjection = gl.getUniformLocation(program,"uProjection");
+		  	mat4.perspective(projectionMatrix,glMatrix.toRadian(30),canvas.width/canvas.height,1,100);
+		  	gl.uniformMatrix4fv(uProjection,false,projectionMatrix);
+
+
+		  	//set-up light and material parameters
+		  	var uLightDirection= gl.getUniformLocation(program,"uLightDirection");
+			gl.uniform3f(uLightDirection,-1.0,-2.5,-5.0);
+
+			var uEyePosition= gl.getUniformLocation(program,"uEyePosition");
+			gl.uniform3f(uEyePosition,3,3,7);
+
+
+		  	// Material Color Properties
+			var uMaterialAmbient = gl.getUniformLocation(program,"uMaterialAmbient");
+		  	gl.uniform3f(uMaterialAmbient,0.0,0.5,0.0);
+
+            var uMaterialDiffuse = gl.getUniformLocation(program,"uMaterialDiffuse");
+            // gl.uniform3f(uMaterialDiffuse,0.2,0.7,0.2);
+            gl.uniform3f(uMaterialDiffuse,0.0,1.0,0.0);
+
+            var uMaterialSpecular = gl.getUniformLocation(program,"uMaterialSpecular");
+		  	gl.uniform3f(uMaterialSpecular,0.9,1.0,0.9);
+
+
+            // Light Color Properties
+			var uLightAmbient = gl.getUniformLocation(program,"uLightAmbient");
+			gl.uniform3f(uLightAmbient,0.3,0.3,0.3);
+
+            var uLightDiffuse = gl.getUniformLocation(program,"uLightDiffuse");
+            gl.uniform3f(uLightDiffuse,1.0,1.0,1.0);
+
+			var uLightSpecular = gl.getUniformLocation(program,"uLightSpecular");
+			gl.uniform3f(uLightSpecular,1.0,1.0,1.0);
+
+			var uShininess = gl.getUniformLocation(program,"uShininess");
+            // gl.uniform1f(uShininess,0.5);
+            gl.uniform1f(uShininess,1.0);
+            // gl.uniform1f(uShininess,3.0);
+			// gl.uniform1f(uShininess,9.0);
+
+
+            // Flags
+			var uEnableAmbient = gl.getUniformLocation(program,"uEnableAmbient");
+			 gl.uniform1i(uEnableAmbient,true);
+            //gl.uniform1i(uEnableAmbient,false);
+
+			var uEnableDiffuse = gl.getUniformLocation(program,"uEnableDiffuse");
+            gl.uniform1i(uEnableDiffuse,true);
+			//gl.uniform1i(uEnableDiffuse,false);
+
+			var uEnableSpecular = gl.getUniformLocation(program,"uEnableSpecular");
+            gl.uniform1i(uEnableSpecular,true);
+			//gl.uniform1i(uEnableSpecular,false);
+
+
+		  	//draw scene
+			gl.clearColor(0, 0, 0, 1);
+			gl.enable(gl.DEPTH_TEST);
+			gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+			gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+			gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_BYTE, 0);
+		}
+	</script>
+</head>
+<body onload="main()">
+	<canvas id="c" width="400" height="400" style="border: 1px black solid; ">
+	</canvas>
+
+
+</body>
+</html>
